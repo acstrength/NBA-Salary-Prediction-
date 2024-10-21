@@ -1,0 +1,254 @@
+---
+title: "NBA Salary Prediction"
+output: html_notebook
+---
+
+## Required Libraries ##
+```{r}
+## load libraries ##
+library(dplyr)
+library(caret)
+install.packages("corrplot")
+library(corrplot)
+```
+
+## Required Data Sets ##
+```{r}
+## load in data sets ##
+salaries_24_25<-read.csv("C:/Users/akeem/Desktop/Data/NBA Salaries.csv")
+stats_17_18<-read.csv("C:/Users/akeem/Desktop/Data/NBA_17_18_Stats.csv")
+stats_18_19<-read.csv("C:/Users/akeem/Desktop/Data/NBA_18_19_Stats.csv")
+stats_19_20<-read.csv("C:/Users/akeem/Desktop/Data/NBA_19_20_Stats.csv")
+stats_20_21<-read.csv("C:/Users/akeem/Desktop/Data/NBA_20_21_Stats.csv")
+stats_21_22<-read.csv("C:/Users/akeem/Desktop/Data/NBA_21_22_Stats.csv")
+stats_22_23<-read.csv("C:/Users/akeem/Desktop/Data/NBA_22_23_Stats.csv")
+```
+
+## Data Cleaning & Preperation ##
+```{r}
+## remove extra columns ##
+stats_17_18<-stats_17_18%>%
+  select(-RANK,-TRB.,-AST.,-MIN.,-USG.)
+
+stats_18_19<-stats_18_19%>%
+  select(-RANK,-TRB.,-AST.,-MIN.,-USG.)
+
+stats_19_20<-stats_19_20%>%
+  select(-RANK,-TRB.,-AST.,-MIN.,-USG.)
+
+stats_20_21<-stats_20_21%>%
+  select(-RANK,-TRB.,-AST.,-MIN.,-USG.)
+
+stats_21_22<-stats_21_22%>%
+  select(-RANK,-TRB.,-AST.,-MIN.,-USG.)
+
+stats_22_23<-stats_22_23%>%
+  select(-RANK,-P.R,-P.A,-P.R.A,-USG.)
+
+## standardize variable names ##
+stats_17_18<- stats_17_18 %>%
+  rename(
+    Name = FULL.NAME,
+    Team = TEAM,
+    POS = POS,
+    Age = AGE,
+    GP = GP,
+    MPG = MPG,
+    FTp = FT.,
+    `2PA` = X2PA,
+    `2Pp` = X2P.,
+    `3PA` = X3PA,
+    `3Pp` = X3P.,
+     TS = TS.)
+
+stats_17_18<-stats_17_18%>%
+  mutate(TOr = TOr * 100)
+    
+stats_18_19 <- stats_18_19 %>%
+  rename(
+    Name = FULL.NAME,
+    Team = TEAM,
+    Age = AGE,
+    TOr = Tor.,
+    FTp = FT.,
+    `2PA` = X2PA,
+    `2Pp` = X2P.,
+    `3PA` = X3PA,
+    `3Pp` = X3P.,
+     TS = TS.)
+
+stats_18_19<-stats_18_19%>%
+  mutate(TOr = TOr * 100)
+  
+stats_19_20 <- stats_19_20 %>%
+  rename(
+    Name = FULL.NAME,
+    Team = TEAM,
+    Age = AGE,
+    FTp = FT.,
+    TOr = TO.,
+    `2PA` = X2PA,
+    `2Pp` = X2P.,
+    `3PA` = X3PA,
+    `3Pp` = X3P.,
+    TS = TS.)
+ 
+stats_20_21 <- stats_20_21 %>%
+  rename(
+    Name = FULL.NAME,
+    Team = TEAM,
+    Age = AGE,
+    FTp = FT.,
+    TOr = TO.,
+    `2PA` = X2PA,
+    `2Pp` = X2P.,
+    `3PA` = X3PA,
+    `3Pp` = X3P.,
+    TS = TS.)
+  
+stats_21_22 <- stats_21_22%>%
+  rename(
+    Name = FULL.NAME,
+    Team = TEAM,
+    Age = AGE,
+    FTp = FT.,
+    `2PA` = X2PA,
+    `2Pp` = X2P.,
+    `3PA` = X3PA,
+    `3Pp` = X3P.,
+     TOr = TO.,
+    TS = TS.)
+
+stats_22_23 <- stats_22_23 %>%
+  rename(
+    Name = NAME,
+    Team = TEAM,
+    Age = AGE,
+    FTp = FT.,
+    `2PA` = X2PA,
+    `2Pp` = X2P.,
+    `3PA` = X3PA,
+    `3Pp` = X3P.,
+     TOr = TO.,
+     TS = TS.,
+     TOPG = TPG,
+     ORTG = ORtg,
+     DRTG = DRtg)
+
+salaries_24_25<-salaries_24_25%>%
+  rename(Name = Player)
+    
+  ## align data types ##
+stats_17_18$Age<-as.numeric(stats_17_18$Age)
+
+```
+
+## Combining Stats Data Frames ##
+```{r}
+## combine stats ##
+all_stats<-bind_rows(stats_17_18,stats_18_19,stats_19_20,stats_20_21,stats_21_22,
+                     stats_22_23)
+```
+
+## Handling NA Values ##
+
+```{r}
+## check for NA values in data set ##
+na_count<-sum(is.na(all_stats))
+message("Total number of NA values in the dataset: ", na_count)
+
+## remove rows with NA values ##
+all_stats<-na.omit(all_stats)
+
+## confirm removal of NA values ##
+na_count_after<-sum(is.na(all_stats))
+message("Total number of NA values after removal:", na_count_after)
+```
+
+## Take Averages ##
+The averages of all of the performance stats were taken to get a sense of what
+is happening collectively across all years.
+```{r}
+## get averages across all years ##
+avg_stats<-all_stats%>%
+  group_by(Name)%>%
+  summarise(
+    GP = round(mean(GP),2),
+    MPG = round(mean(MPG),2),
+    TOr = round(mean(TOr),2),
+    FTA = round(mean(FTA),2),
+    FTp = round(mean(FTp),2),
+    `2PA` = round(mean(`2PA`),2),
+    `2Pp` = round(mean(`2Pp`),2),
+    `3PA` = round(mean(`3PA`),2),
+    `3Pp` = round(mean(`3Pp`),2),
+    eFG. = round(mean(eFG.),2),
+    TS = round(mean(TS),2),
+    PPG = round(mean(PPG),2),
+    RPG = round(mean(RPG),2),
+    APG = round(mean(APG),2),
+    SPG = round(mean(SPG),2),
+    BPG = round(mean(BPG),2),
+    TOPG = round(mean(TOPG),2),
+    VI = round(mean(VI),2),
+    ORTG = round(mean(ORTG),2),
+    DRTG = round(mean(DRTG),2))
+```
+
+## Inner Join
+An inner join was performed on the "Name" columns.
+```{r}
+## join salary data frame ##
+joined_stats<-avg_stats%>%
+  inner_join(salaries_24_25,by = 'Name')
+```
+
+## Clean New Data Frame ##
+The salaries_24_25 data frame contained rows that are not necessary to this 
+anlysis. 
+```{r}
+## remove extra columns ##  
+joined_stats<-joined_stats%>%
+  select(-X2025.26,-X2026.27,-X2027.28,-X2028.29,-X2029.30,-Guaranteed)%>%
+  rename(salary_24_25 = X2024.25)
+
+## remove dollar sign and comma ##
+joined_stats$salary_24_25<-as.numeric(gsub("[$,]","",joined_stats$salary_24_25))
+```
+
+
+## Check for Multicollinearity ##
+A correlation matrix was produced to visualize the correlative strength amongst
+the predictor variables. 
+```{r}
+cor_matrix<-cor(joined_stats%>%
+                  select(-salary_24_25,-Name,-Tm))
+
+viz_cor_matrix<-corrplot(cor_matrix,method='circle',type = "upper")
+```
+
+## Feature Selection ##
+A threshold range of -0.8 to 0.8 was chosen to eliminate some of the variables 
+that correlate too highly with one another. Exceptions were made for the 
+variables that are intuitively necessary for the analysis, IE PPG, MPG. 
+
+```{r}
+## remove high correlating variables ##
+joined_stats<-joined_stats%>%
+  select(-TOPG,-FTA,-eFG.)
+```
+
+## Fit Multiple Linear Regression Model ##
+The model achieved an impressive adjusted R-squared value of 85%
+```{r}
+lr_model<-lm(salary_24_25 ~ . - Name - Tm, data = joined_stats)
+summary(lr_model)
+```
+
+
+
+
+
+
+
+
