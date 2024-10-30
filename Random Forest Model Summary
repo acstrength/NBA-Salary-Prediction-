@@ -1,0 +1,8 @@
+Call:
+ randomForest(formula = salary_24_25 ~ GP + MPG + TOr + FTp +  PA_2 + Pp_2 + PA_3 + Pp_3 + TS + PPG + RPG + APG + SPG + BPG + VI + ORTG + Rk, data = train_data, ntree = 500) 
+               Type of random forest: regression
+                     Number of trees: 500
+No. of variables tried at each split: 5
+
+          Mean of squared residuals: 9.049542e+12
+                    % Var explained: 94.83
