@@ -1,6 +1,8 @@
 ## load libraries ##
 library(dplyr)
 library(caret)
+library(ggplot2)
+library(scales)
 library(corrplot)
 library(randomForest)
 
@@ -179,6 +181,35 @@ joined_stats$salary_24_25<-as.numeric(gsub("[$,]","",joined_stats$salary_24_25))
 cor_matrix<-cor(joined_stats%>%
                   select(-salary_24_25,-Name,-Tm))
 
+## EDA (salary vs ppg) ##
+ggplot(joined_stats, aes(x = PPG, y = salary_24_25)) +
+  geom_point(color = "black") +
+  geom_smooth(method = "lm", color = "black", se = FALSE) +
+  labs(title = "Salary vs Points Per Game",
+       x = "Points Per Game",
+       y = "Salary") +
+  scale_y_continuous(labels = comma) +
+  theme_minimal()
+
+summary(joined_stats$salary_24_25)
+cat("50% of the league is making less than 7,622,034. The majroity of players
+    are making somewhere between 1,000,000 and 17,303,902")
+
+## EDA(salar vs mpg)
+ggplot(joined_stats, aes(x = MPG, y = salary_24_25)) +
+  geom_point(color = "black") +
+  geom_smooth(method = "lm", color = "black", se = FALSE) +
+  labs(title = "Salary vs Points Per Game",
+       x = "MPG",
+       y = "Salary") +
+  scale_y_continuous(labels = comma) +
+  theme_minimal()
+
+summary(joined_stats$MPG)
+cat("Salaries tend to increase significantly after approximately 20 minutes
+      per game. There is an exception to this rule, as one player is making 
+      exactly 30,000,000  at 15 minutes per game")
+
 ## visualize correlation matrix
 viz_cor_matrix<-corrplot(cor_matrix,method='circle',type = "upper")
 
@@ -264,6 +295,6 @@ ggplot(results, aes(x = Actual, y = Predicted)) +
   labs(title = "Actual vs Predicted Salaries", x = "Actual", y = "Predicted")
 
   
-  
+
 
 
