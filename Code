@@ -66,9 +66,6 @@ stats_18_19 <- stats_18_19 %>%
     `3Pp` = X3P.,
      TS = TS.)
 
-stats_18_19<-stats_18_19%>%
-  mutate(TOr = TOr * 100)
-  
 stats_19_20 <- stats_19_20 %>%
   rename(
     Name = FULL.NAME,
@@ -134,6 +131,9 @@ stats_17_18$Age<-as.numeric(stats_17_18$Age)
 all_stats<-bind_rows(stats_17_18,stats_18_19,stats_19_20,stats_20_21,stats_21_22,
                      stats_22_23)
 
+all_stats<-all_stats%>%
+  mutate(SA = `3PA` + `2PA`)
+
 ## check for and remove NA values ##
 na_count<-sum(is.na(all_stats))
 all_stats<-na.omit(all_stats)
@@ -176,7 +176,12 @@ joined_stats<-joined_stats%>%
 ## remove dollar sign and comma ##
 joined_stats$salary_24_25<-as.numeric(gsub("[$,]","",joined_stats$salary_24_25))
 
-  ## EDA (salary vs ppg) ##
+summary(joined_stats$PPG)
+cat("The leage average is 10.48 points per game. 50% of the leage averages 
+    between 0 and 8.82 points per agem.")
+
+
+## EDA (salary vs ppg) ##
 ggplot(joined_stats, aes(x = PPG, y = salary_24_25)) +
   geom_point(color = 'black') +
   geom_smooth(method = 'lm', color = 'black', se = FALSE) + 
@@ -206,6 +211,19 @@ cat("Salaries tend to increase significantly after approximately 20 minutes
       per game. There is an exception to this rule, as one player is making 
       exactly 30,000,000  at 15 minutes per game")
 
+ggplot(joined_stats, aes(x = SPG, y = salary_24_25)) +
+  geom_point(color = "black") +
+  geom_smooth(method = "lm", color = "black", se = FALSE) +
+  labs(title = "Salary vs Steals Per Game",
+       x = "Steals",
+       y = "Salary") +
+  scale_y_continuous(labels = scales::comma) +
+  theme_minimal()
+
+summary(joined_stats$SPG)
+cat("The leage average turnover % is 12.60, while the maximum is 36.50, held by 
+    Joshua Primo")
+
 
 ## check for multicollinearity ##
 cor_matrix<-cor(joined_stats%>%
@@ -225,7 +243,7 @@ summary(lr_model1)
 
 ## Fit multiple linear regression model with interaction effects ##
 
-lr_model2<-lm(salary_24_25 ~ GP*MPG+TOr+FTp+PA_2*Pp_2+PA_3*Pp_3+TS+PPG+
+lr_model2<-lm(salary_24_25 ~ GP+MPG+TOr+FTp+PA_2*Pp_2+PA_3*Pp_3+ TS + PPG+
          RPG+APG+SPG+BPG+VI+ORTG+DRTG,data = joined_stats)
 summary(lr_model2)
 
@@ -234,6 +252,7 @@ set.seed(123)
 train_index<-sample(1:nrow(joined_stats),0.8 * nrow(joined_stats))
 train_data<-joined_stats[train_index, ]
 test_data<-joined_stats[-train_index, ]
+
 
 ## make predictions with multiple linear regression model ##
 lr_predictions<-predict(lr_model2,newdata = test_data)
@@ -258,7 +277,7 @@ cat("Mean Absolute Error (MAE):",lr_MAE,"\n")
 ## fit random Forest model ##
 rf_model<-randomForest(salary_24_25 ~ GP + MPG + TOr + FTp + PA_2 + Pp_2 + 
                            PA_3 + Pp_3 + TS + PPG + RPG + APG + SPG + 
-                           BPG + VI + ORTG ,
+                           BPG + VI + ORTG + DRTG , 
                          data = train_data,
                          ntree = 500)
 print(rf_model)
