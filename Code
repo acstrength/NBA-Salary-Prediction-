@@ -5,6 +5,8 @@ library(ggplot2)
 library(scales)
 library(corrplot)
 library(randomForest)
+library(car)
+library(glue)
 
 ## load in data sets ##
 salaries_24_25<-read.csv("C:/Users/akeem/Desktop/Data/NBA Salaries.csv")
@@ -131,9 +133,6 @@ stats_17_18$Age<-as.numeric(stats_17_18$Age)
 all_stats<-bind_rows(stats_17_18,stats_18_19,stats_19_20,stats_20_21,stats_21_22,
                      stats_22_23)
 
-all_stats<-all_stats%>%
-  mutate(SA = `3PA` + `2PA`)
-
 ## check for and remove NA values ##
 na_count<-sum(is.na(all_stats))
 all_stats<-na.omit(all_stats)
@@ -177,8 +176,9 @@ joined_stats<-joined_stats%>%
 joined_stats$salary_24_25<-as.numeric(gsub("[$,]","",joined_stats$salary_24_25))
 
 summary(joined_stats$PPG)
-cat("The leage average is 10.48 points per game. 50% of the leage averages 
-    between 0 and 8.82 points per agem.")
+glue("The league average is {round(mean(joined_stats$PPG),2)} points per game. 
+50% of the leage averages between 0 and {round(median(joined_stats$PPG),2)} 
+     points per game.")
 
 
 ## EDA (salary vs ppg) ##
@@ -193,8 +193,8 @@ ggplot(joined_stats, aes(x = PPG, y = salary_24_25)) +
 
   
 summary(joined_stats$salary_24_25)
-cat("50% of the league is making less than 7,622,034. The majroity of players
-    are making somewhere between 1,000,000 and 17,303,902")
+glue("50% of the league is making less than {median(joined_stats$salary_24_25)}.
+The majroity of players are making somewhere between 100000 and 17,303,902")
 
 ## EDA (salary vs mpg)
 ggplot(joined_stats, aes(x = MPG, y = salary_24_25)) +
@@ -205,6 +205,7 @@ ggplot(joined_stats, aes(x = MPG, y = salary_24_25)) +
        y = "Salary") +
   scale_y_continuous(labels = comma,limits = c(0,NA)) +
   theme_minimal()
+
 
 summary(joined_stats$MPG)
 cat("Salaries tend to increase significantly after approximately 20 minutes
@@ -224,28 +225,62 @@ summary(joined_stats$SPG)
 cat("The leage average turnover % is 12.60, while the maximum is 36.50, held by 
     Joshua Primo")
 
+## create top 10 earners data frame
+top_10_earners<-joined_stats%>%
+  arrange(desc(salary_24_25))%>%
+  slice_head(n = 10)
+
+## find average of top 10 ##
+average_top_10<-top_10_earners%>%
+  summarize(average_salary = mean(salary_24_25))
+ 
+top_10_earners<-top_10_earners%>%
+  select(Name, Salary = salary_24_25)%>%
+  mutate(Salary = comma(Salary))
+
+## find average for rest of league ##
+average_no_top_10<-joined_stats%>%
+  filter(!Name%in% top_10_earners$Name)%>%
+  summarize(average_salary = mean(salary_24_25))
+
+print(average_no_top_10)
+
+## create averages data frame ##
+league_averages <- data.frame(
+  Category = c("Top 10 Earners", "Remaining Players"),
+  Average_Salary = c(average_top_10$average_salary, average_no_top_10$average_salary))
+
+# Create a bar plot ##
+ggplot(league_averages, aes(x = Category, y = Average_Salary, fill = Category)) +
+  geom_bar(stat = "identity", show.legend = FALSE) +
+  theme_minimal() +
+  scale_y_continuous(labels = scales::comma) +
+  labs(title = "Average Salary Comparison: Top 10 vs Remaining Players",
+       y = "Average Salary ($)", x = "Category") +
+  theme(axis.text.x = element_text(angle = 0,hjust = 0.5))
 
 ## check for multicollinearity ##
 cor_matrix<-cor(joined_stats%>%
-                  select(-salary_24_25,-Name,-Tm))
-
+                  select(-salary_24_25,-Name,-Tm,))
 
 ## visualize correlation matrix
 viz_cor_matrix<-corrplot(cor_matrix,method='circle',type = "upper")
 
 ## remove high correlating variables ##
 joined_stats<-joined_stats%>%
-  select(-TOPG,-FTA,-eFG.)
+  select(-TOPG,-FTA,-eFG.,-MPG,-PA_2,-DRTG)
 
 ## Fit Multiple Linear Regression Model ##
-lr_model1<-lm(salary_24_25 ~ . - Name - Tm, data = joined_stats)
+lr_model1<-lm(salary_24_25 ~ . - Name - Tm, 
+              data = joined_stats)
 summary(lr_model1)
 
-## Fit multiple linear regression model with interaction effects ##
+ ## Fit multiple linear regression model with interaction effects ##
 
-lr_model2<-lm(salary_24_25 ~ GP+MPG+TOr+FTp+PA_2*Pp_2+PA_3*Pp_3+ TS + PPG+
-         RPG+APG+SPG+BPG+VI+ORTG+DRTG,data = joined_stats)
+lr_model2<-lm(salary_24_25 ~ GP+TOr+FTp+Pp_2+PA_3*Pp_3+TS+PPG*APG+
+         RPG+APG+SPG*BPG+VI+ORTG,data = joined_stats)
 summary(lr_model2)
+
 
 ## split data into training and testing sets ##
 set.seed(123)
@@ -274,10 +309,25 @@ cat("Mean Squared Error (MSE):", lr_MSE, "\n")
 cat("Root Mean Squared Error (RMSE)", lr_RMSE, "\n")
 cat("Mean Absolute Error (MAE):",lr_MAE,"\n")
 
+## create lr actual vs predicted data frame ##
+lr_results<-data.frame(Actual = test_data$salary_24_25, Predicted = lr_predictions )
+
+
+## create scatter plot of actual vs predcited ##
+ggplot(lr_results, aes(x = Actual, y = Predicted)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0, color = 'black') +
+  theme_minimal() +
+  scale_x_continuous(labels = scales::comma) +
+  scale_y_continuous(labels = scales::comma) +
+  labs(title = "Actual vs Predicted Salaries (Multiple Linear Regression)",
+       x = "Actual", y = "Predicted")
+  
+
 ## fit random Forest model ##
-rf_model<-randomForest(salary_24_25 ~ GP + MPG + TOr + FTp + PA_2 + Pp_2 + 
+rf_model<-randomForest(salary_24_25 ~ GP + TOr + FTp + Pp_2 + 
                            PA_3 + Pp_3 + TS + PPG + RPG + APG + SPG + 
-                           BPG + VI + ORTG + DRTG , 
+                           BPG + VI + ORTG , 
                          data = train_data,
                          ntree = 500)
 print(rf_model)
@@ -306,14 +356,43 @@ cat("Random Forest MSE:",rf_mse, "\n")
 cat("Random Forest MAE:",rf_mae, "\n")
 
 ## create scatter plot of actual vs predicted salaries ##
-results<-data.frame(Actual = test_data$salary_24_25, Predicted = rf_predictions)
-ggplot(results, aes(x = Actual, y = Predicted)) +
+rf_results<-data.frame(Actual = test_data$salary_24_25, Predicted = rf_predictions)
+
+ggplot(rf_results, aes(x = Actual, y = Predicted)) +
   geom_point() +
   geom_abline(slope = 1, intercept = 0, color = "black") +
   theme_minimal() +
   scale_x_continuous(labels = scales::comma) +
   scale_y_continuous(labels = scales::comma) +
-  labs(title = "Actual vs Predicted Salaries", x = "Actual", y = "Predicted")
+  labs(title = "Actual vs Predicted Salaries (Random Forest)", x = "Actual", y = "Predicted")
+
+## create data frame for model comparison
+model_comparison <- data.frame(
+  Model = c("Linear Regression", "Random Forest"),
+  RMSE = c(lr_RMSE, rf_rmse),
+  MAE = c(lr_MAE, rf_mae),
+  MSE = c(lr_MSE, rf_mse))
+
+## create bar plot of MSE comparison ##
+ggplot(model_comparison, aes(x = Model, y = MSE, fill = Model)) +
+  geom_bar(stat = "identity") + 
+  labs(title = "Model Comparison: MSE", y = "MSE") +
+  scale_y_continuous(labels = scales::comma)
+
+
+## create bar plot of RMSE comparison ##
+ggplot(model_comparison, aes(x = Model, y = RMSE, fill = Model)) +
+  geom_bar(stat = "identity") + 
+  labs(title = "Model Comparison: RMSE", y = "RMSE") +
+  scale_y_continuous(labels = scales::comma)
+
+## create bar plot of MAE comparison ##
+ggplot(model_comparison, aes(x = Model, y = MAE, fill = Model)) +
+  geom_bar(stat = "identity") + 
+  labs(title = "Model Comparison: MAE", y = "MAE") +
+  scale_y_continuous(labels = scales::comma)
+
+
 
 
 
